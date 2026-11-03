@@ -8,7 +8,33 @@ on:
 permissions:
   contents: read
 
+env:
+  # A fixed commit, so the cache path is exercised.
+  DOCGEN_PIN: e1a899b8c7ec5a1494be07caf2338086fd99bcc9
+
 jobs:
+  cache-first:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./
+        with:
+          version: ${{ env.DOCGEN_PIN }}
+          module-dir: testdata/module
+
+  # Runs after cache-first has saved the binary, so it must hit.
+  cache-second:
+    needs: cache-first
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - id: docgen
+        uses: ./
+        with:
+          version: ${{ env.DOCGEN_PIN }}
+          module-dir: testdata/module
+      - run: test "${{ steps.docgen.outputs.cache-hit }}" = "true"
+
   action:
     runs-on: ubuntu-latest
     steps:
