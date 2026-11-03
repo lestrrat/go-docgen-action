@@ -80,7 +80,7 @@ runs:
     - name: Restore the docgen binary
       id: cache
       if: steps.ver.outputs.cacheable == 'true'
-      uses: actions/cache@v4
+      uses: actions/cache@v6
       with:
         path: ${{ runner.temp }}/docgen-bin
         key: docgen-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ inputs.version }}
