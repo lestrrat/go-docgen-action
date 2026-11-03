@@ -1,0 +1,97 @@
+name: docgen
+description: Generate Markdown API documentation for a Go module with docgen.
+author: lestrrat
+branding:
+  icon: book-open
+  color: blue
+
+inputs:
+  version:
+    description: docgen version to install (a tag, branch, commit, or "latest").
+    default: latest
+  go-version:
+    description: Go version to install. docgen needs a recent Go toolchain.
+    default: stable
+  module-dir:
+    description: Module root; must contain go.mod.
+    default: "."
+  out:
+    description: Output directory. A relative path is joined with module-dir.
+    default: docs
+  check:
+    description: >-
+      When "true", write nothing and fail if the committed docs differ
+      from freshly generated ones.
+    default: "false"
+  tags:
+    description: Comma-separated build tags.
+    default: ""
+  goos:
+    description: GOOS for the build context. Empty uses the docgen default.
+    default: ""
+  goarch:
+    description: GOARCH for the build context. Empty uses the docgen default.
+    default: ""
+  source-ref:
+    description: Enable GitHub source links at this ref.
+    default: ""
+  source-base-url:
+    description: Enable source links under this base URL.
+    default: ""
+
+outputs:
+  changed:
+    description: >-
+      "true" if generating changed files under the output directory,
+      "false" if not, empty in check mode or when module-dir is not in a git repository.
+    value: ${{ steps.run.outputs.changed }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@v6
+      with:
+        go-version: ${{ inputs.go-version }}
+        cache: false
+
+    - name: Install docgen
+      shell: bash
+      env:
+        DOCGEN_VERSION: ${{ inputs.version }}
+      run: go install "github.com/lestrrat-go/docgen/cmd/docgen@${DOCGEN_VERSION}"
+
+    - name: Run docgen
+      id: run
+      shell: bash
+      env:
+        MODULE_DIR: ${{ inputs.module-dir }}
+        OUT: ${{ inputs.out }}
+        CHECK: ${{ inputs.check }}
+        TAGS: ${{ inputs.tags }}
+        GOOS_INPUT: ${{ inputs.goos }}
+        GOARCH_INPUT: ${{ inputs.goarch }}
+        SOURCE_REF: ${{ inputs.source-ref }}
+        SOURCE_BASE_URL: ${{ inputs.source-base-url }}
+      run: |
+        set -euo pipefail
+        args=(--module-dir "$MODULE_DIR" --out "$OUT")
+        [ -n "$TAGS" ] && args+=(--tags "$TAGS")
+        [ -n "$GOOS_INPUT" ] && args+=(--goos "$GOOS_INPUT")
+        [ -n "$GOARCH_INPUT" ] && args+=(--goarch "$GOARCH_INPUT")
+        [ -n "$SOURCE_REF" ] && args+=(--source-ref "$SOURCE_REF")
+        [ -n "$SOURCE_BASE_URL" ] && args+=(--source-base-url "$SOURCE_BASE_URL")
+
+        if [ "$CHECK" = "true" ]; then
+          "$(go env GOPATH)/bin/docgen" "${args[@]}" --check
+          exit 0
+        fi
+
+        "$(go env GOPATH)/bin/docgen" "${args[@]}"
+
+        if git -C "$MODULE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+          if [ -n "$(git -C "$MODULE_DIR" status --porcelain --untracked-files=all -- "$OUT")" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+        fi

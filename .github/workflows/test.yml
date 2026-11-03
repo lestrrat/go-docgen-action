@@ -1,0 +1,44 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  action:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Generate docs for the fixture module
+        id: generate
+        uses: ./
+        with:
+          module-dir: testdata/module
+
+      - name: Expect generated files
+        run: |
+          test -f testdata/module/docs/README.md
+          test "${{ steps.generate.outputs.changed }}" = "true"
+
+      - name: Check passes right after generating
+        uses: ./
+        with:
+          module-dir: testdata/module
+          check: "true"
+
+      - name: Check fails when docs are stale
+        id: stale
+        continue-on-error: true
+        uses: ./
+        with:
+          module-dir: testdata/module
+          out: stale-docs
+          check: "true"
+
+      - name: Expect the stale check to fail
+        run: test "${{ steps.stale.outcome }}" = "failure"
