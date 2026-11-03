@@ -33,7 +33,7 @@ The step prints the paths of files that differ and fails.
 | Input | Default | Description |
 |-------|---------|-------------|
 | `version` | `latest` | docgen version to install: a tag, branch, commit, or `latest`. |
-| `go-version` | `stable` | Go version to install. docgen needs a recent toolchain. |
+| `go-version` | | Go version to install. Empty reads it from `module-dir/go.mod`, so docgen is built with a toolchain at least as new as the module needs. |
 | `module-dir` | `.` | Module root; must contain `go.mod`. |
 | `out` | `docs` | Output directory. A relative path is joined with `module-dir`. |
 | `check` | `false` | When `true`, write nothing and fail if committed docs differ. |
