@@ -32,7 +32,7 @@ The step prints the paths of files that differ and fails.
 
 | Input | Default | Description |
 |-------|---------|-------------|
-| `version` | `latest` | docgen version to install: a tag, branch, commit, or `latest`. |
+| `version` | `latest` | docgen version to install: a tag, branch, commit, or `latest`. A tag or commit is cached between runs; a branch or `latest` is rebuilt every run. |
 | `go-version` | | Go version to install. Empty reads it from `module-dir/go.mod`, so docgen is built with a toolchain at least as new as the module needs. |
 | `module-dir` | `.` | Module root; must contain `go.mod`. |
 | `out` | `docs` | Output directory. A relative path is joined with `module-dir`. |
@@ -48,3 +48,10 @@ The step prints the paths of files that differ and fails.
 | Output | Description |
 |--------|-------------|
 | `changed` | `true` if generating changed files under the output directory, `false` if not. Empty in check mode, or when `module-dir` is not in a git repository. |
+| `cache-hit` | `true` if the docgen binary came from the cache, `false` if it was built. Empty when `version` is not a tag or commit. |
+
+## Caching
+
+When `version` is a tag (such as `v0.1.0`) or a commit hash, the action caches the built
+`docgen` binary with `actions/cache`. The cache key includes the runner OS and architecture,
+the installed Go version, and `version`. Pin `version` to get the cache.

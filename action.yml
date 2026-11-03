@@ -47,20 +47,50 @@ outputs:
       "true" if generating changed files under the output directory,
       "false" if not, empty in check mode or when module-dir is not in a git repository.
     value: ${{ steps.run.outputs.changed }}
+  cache-hit:
+    description: >-
+      "true" if the docgen binary came from the cache, "false" if it was
+      built, empty if the version is not cacheable.
+    value: ${{ steps.cache.outputs.cache-hit }}
 
 runs:
   using: composite
   steps:
     - uses: actions/setup-go@v6
+      id: go
       with:
         go-version: ${{ inputs.go-version }}
         go-version-file: ${{ inputs.module-dir }}/go.mod
         cache: false
 
-    - name: Install docgen
+    # A tag or commit never changes, so its binary is safe to cache.
+    # A branch name or "latest" moves, so those are always rebuilt.
+    - name: Check whether the docgen version is cacheable
+      id: ver
       shell: bash
       env:
         DOCGEN_VERSION: ${{ inputs.version }}
+      run: |
+        if [[ "$DOCGEN_VERSION" =~ ^v[0-9] || "$DOCGEN_VERSION" =~ ^[0-9a-f]{7,40}$ ]]; then
+          echo "cacheable=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "cacheable=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Restore the docgen binary
+      id: cache
+      if: steps.ver.outputs.cacheable == 'true'
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/docgen-bin
+        key: docgen-${{ runner.os }}-${{ runner.arch }}-go${{ steps.go.outputs.go-version }}-${{ inputs.version }}
+
+    - name: Install docgen
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      env:
+        DOCGEN_VERSION: ${{ inputs.version }}
+        GOBIN: ${{ runner.temp }}/docgen-bin
       run: go install "github.com/lestrrat-go/docgen/cmd/docgen@${DOCGEN_VERSION}"
 
     - name: Run docgen
@@ -75,6 +105,7 @@ runs:
         GOARCH_INPUT: ${{ inputs.goarch }}
         SOURCE_REF: ${{ inputs.source-ref }}
         SOURCE_BASE_URL: ${{ inputs.source-base-url }}
+        DOCGEN_BIN: ${{ runner.temp }}/docgen-bin/docgen
       run: |
         set -euo pipefail
         args=(--module-dir "$MODULE_DIR" --out "$OUT")
@@ -85,11 +116,11 @@ runs:
         [ -n "$SOURCE_BASE_URL" ] && args+=(--source-base-url "$SOURCE_BASE_URL")
 
         if [ "$CHECK" = "true" ]; then
-          "$(go env GOPATH)/bin/docgen" "${args[@]}" --check
+          "$DOCGEN_BIN" "${args[@]}" --check
           exit 0
         fi
 
-        "$(go env GOPATH)/bin/docgen" "${args[@]}"
+        "$DOCGEN_BIN" "${args[@]}"
 
         if git -C "$MODULE_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
           if [ -n "$(git -C "$MODULE_DIR" status --porcelain --untracked-files=all -- "$OUT")" ]; then
