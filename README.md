@@ -42,6 +42,10 @@ The step prints the paths of files that differ and fails.
 | `goarch` | | GOARCH for the build context. Empty uses the docgen default (`amd64`). |
 | `source-ref` | | Enable GitHub source links at this ref. |
 | `source-base-url` | | Enable source links under this base URL. |
+| `commit` | `false` | When `true` (and `check` is not `true`), commit changed docs under `out` and push them. See [Committing the docs](#committing-the-docs). |
+| `commit-message` | `update generated docs` | Commit message. |
+| `commit-user-name` | `github-actions[bot]` | Git author and committer name. |
+| `commit-user-email` | `41898282+github-actions[bot]@users.noreply.github.com` | Git author and committer email. |
 
 ## Outputs
 
@@ -49,6 +53,50 @@ The step prints the paths of files that differ and fails.
 |--------|-------------|
 | `changed` | `true` if generating changed files under the output directory, `false` if not. Empty in check mode, or when `module-dir` is not in a git repository. |
 | `cache-hit` | `true` if the docgen binary came from the cache, `false` if it was built. Empty when `version` is not a tag or commit. |
+| `pushed` | `true` if the action pushed a docs commit, `false` if not. Empty unless `commit` is `true`. |
+
+## Committing the docs
+
+Set `commit: "true"` to have the action commit and push changed files under `out`. The job
+needs `contents: write`.
+
+```yaml
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          # On pull requests, check out the head branch, not the default merge commit.
+          ref: ${{ github.head_ref || github.ref }}
+      - uses: lestrrat/go-docgen-action@main
+        with:
+          commit: "true"
+```
+
+Where the commit goes:
+
+- On a push, the action pushes to the current branch.
+- On a pull request, it pushes to the pull request's head branch.
+
+The action warns and continues, leaving the docs stale and `pushed` set to `false`, when:
+
+- The pull request comes from a fork.
+- A pull request job checked out the merge commit instead of the head branch.
+- The ref is a tag.
+- The push fails (read-only token, protected branch, or the branch moved).
+
+Pushes made with the default `GITHUB_TOKEN` do not start other workflows. To run required checks
+on the docs commit, give `actions/checkout` a personal access token or app token through its
+`token` input.
 
 ## Caching
 

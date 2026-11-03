@@ -40,8 +40,29 @@ inputs:
   source-base-url:
     description: Enable source links under this base URL.
     default: ""
+  commit:
+    description: >-
+      When "true" (and check is not "true"), commit changed docs under the
+      output directory and push them to the current branch, or to the head
+      branch of a pull request. The job needs contents: write. If the push is
+      not possible the action warns and continues.
+    default: "false"
+  commit-message:
+    description: Commit message for the generated docs.
+    default: update generated docs
+  commit-user-name:
+    description: Git author and committer name.
+    default: github-actions[bot]
+  commit-user-email:
+    description: Git author and committer email.
+    default: 41898282+github-actions[bot]@users.noreply.github.com
 
 outputs:
+  pushed:
+    description: >-
+      "true" if the action pushed a docs commit, "false" if not, empty unless
+      commit is "true".
+    value: ${{ steps.commit.outputs.pushed }}
   changed:
     description: >-
       "true" if generating changed files under the output directory,
@@ -128,4 +149,65 @@ runs:
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
+        fi
+
+    - name: Commit and push generated docs
+      id: commit
+      if: inputs.commit == 'true' && inputs.check != 'true'
+      shell: bash
+      env:
+        MODULE_DIR: ${{ inputs.module-dir }}
+        OUT: ${{ inputs.out }}
+        COMMIT_MESSAGE: ${{ inputs.commit-message }}
+        COMMIT_NAME: ${{ inputs.commit-user-name }}
+        COMMIT_EMAIL: ${{ inputs.commit-user-email }}
+        EVENT_NAME: ${{ github.event_name }}
+        REF_TYPE: ${{ github.ref_type }}
+        REF_NAME: ${{ github.ref_name }}
+        HEAD_REF: ${{ github.head_ref }}
+        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        REPOSITORY: ${{ github.repository }}
+      run: |
+        set -uo pipefail
+        echo "pushed=false" >> "$GITHUB_OUTPUT"
+        skip() {
+          echo "::warning title=docgen::$1"
+          exit 0
+        }
+        git_() { git -C "$MODULE_DIR" "$@"; }
+
+        git_ rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+          skip "module-dir is not in a git repository; nothing to commit."
+
+        case "$EVENT_NAME" in
+          pull_request | pull_request_target)
+            [ "$HEAD_REPO" = "$REPOSITORY" ] ||
+              skip "the pull request is from a fork; generated docs were not pushed."
+            if [ "$(git_ rev-parse HEAD)" != "$PR_HEAD_SHA" ]; then
+              skip "the checkout is not the pull request head (the default is a merge commit); check out the head branch with actions/checkout 'ref: github.head_ref' to push generated docs."
+            fi
+            target="$HEAD_REF"
+            ;;
+          *)
+            [ "$REF_TYPE" = "branch" ] ||
+              skip "the ref is a $REF_TYPE, not a branch; generated docs were not pushed."
+            target="$REF_NAME"
+            ;;
+        esac
+
+        git_ add -A -- "$OUT"
+        if git_ diff --cached --quiet -- "$OUT"; then
+          echo "Generated docs are already up to date."
+          exit 0
+        fi
+
+        git_ -c user.name="$COMMIT_NAME" -c user.email="$COMMIT_EMAIL" \
+          commit --quiet -m "$COMMIT_MESSAGE" -- "$OUT" ||
+          skip "git commit failed; generated docs were not pushed."
+
+        if git_ push origin "HEAD:refs/heads/$target"; then
+          echo "pushed=true" >> "$GITHUB_OUTPUT"
+        else
+          skip "git push to $target failed (read-only token, protected branch, or the branch moved); generated docs were not pushed."
         fi
