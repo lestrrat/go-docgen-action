@@ -4,6 +4,8 @@ on:
   push:
     branches: [main]
   pull_request:
+  # Lets the push path be exercised from a branch; see the commit job.
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -34,6 +36,48 @@ jobs:
           version: ${{ env.DOCGEN_PIN }}
           module-dir: testdata/module
       - run: test "${{ steps.docgen.outputs.cache-hit }}" = "true"
+
+  # Runs the commit path against a scratch repository with a local bare remote.
+  # On pull_request the checkout is not the PR head, so the action must skip
+  # and warn. On push and workflow_dispatch it must push a bot commit.
+  commit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Create a scratch repository with a bare remote
+        run: |
+          set -euo pipefail
+          work="$RUNNER_TEMP/work"
+          remote="$RUNNER_TEMP/remote.git"
+          git init --bare "$remote"
+          mkdir "$work"
+          cp -R testdata/module/. "$work/"
+          git -C "$work" init -b "$GITHUB_REF_NAME"
+          git -C "$work" remote add origin "$remote"
+          git -C "$work" add -A
+          git -C "$work" -c user.name=test -c user.email=test@example.com commit -m init
+          git -C "$work" push origin "HEAD:refs/heads/$GITHUB_REF_NAME"
+
+      - id: docgen
+        uses: ./
+        with:
+          version: ${{ env.DOCGEN_PIN }}
+          module-dir: ${{ runner.temp }}/work
+          commit: "true"
+
+      - name: Expect the push to be skipped on pull_request
+        if: github.event_name == 'pull_request'
+        run: test "${{ steps.docgen.outputs.pushed }}" = "false"
+
+      - name: Expect a bot commit on the remote
+        if: github.event_name != 'pull_request'
+        run: |
+          set -euo pipefail
+          remote="$RUNNER_TEMP/remote.git"
+          test "${{ steps.docgen.outputs.pushed }}" = "true"
+          test "$(git --git-dir="$remote" log -1 --format=%an "refs/heads/$GITHUB_REF_NAME")" = "github-actions[bot]"
+          git --git-dir="$remote" ls-tree -r --name-only "refs/heads/$GITHUB_REF_NAME" | grep -x docs/README.md
 
   action:
     runs-on: ubuntu-latest
