@@ -10,8 +10,10 @@ inputs:
     description: docgen version to install (a tag, branch, commit, or "latest").
     default: latest
   go-version:
-    description: Go version to install. docgen needs a recent Go toolchain.
-    default: stable
+    description: >-
+      Go version to install. Empty reads the version from module-dir/go.mod,
+      so docgen is built with a toolchain at least as new as the module needs.
+    default: ""
   module-dir:
     description: Module root; must contain go.mod.
     default: "."
@@ -52,6 +54,7 @@ runs:
     - uses: actions/setup-go@v6
       with:
         go-version: ${{ inputs.go-version }}
+        go-version-file: ${{ inputs.module-dir }}/go.mod
         cache: false
 
     - name: Install docgen
