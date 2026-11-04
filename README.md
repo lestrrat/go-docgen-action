@@ -11,7 +11,7 @@ pushes. Your workflow decides what to do with the generated files.
 ## Generate docs
 
 ```yaml
-- uses: actions/checkout@v5
+- uses: actions/checkout@v7
 - uses: lestrrat/go-docgen-action@main
   id: docgen
 - run: git status --short docs
@@ -20,7 +20,7 @@ pushes. Your workflow decides what to do with the generated files.
 ## Fail when committed docs are stale
 
 ```yaml
-- uses: actions/checkout@v5
+- uses: actions/checkout@v7
 - uses: lestrrat/go-docgen-action@main
   with:
     check: "true"
@@ -73,7 +73,7 @@ jobs:
   docs:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # On pull requests, check out the head branch, not the default merge commit.
           ref: ${{ github.head_ref || github.ref }}

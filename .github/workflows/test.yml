@@ -18,7 +18,7 @@ jobs:
   cache-first:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: ./
         with:
           version: ${{ env.DOCGEN_PIN }}
@@ -29,7 +29,7 @@ jobs:
     needs: cache-first
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - id: docgen
         uses: ./
         with:
@@ -43,7 +43,7 @@ jobs:
   commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Create a scratch repository with a bare remote
         run: |
@@ -82,7 +82,7 @@ jobs:
   action:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Generate docs for the fixture module
         id: generate
